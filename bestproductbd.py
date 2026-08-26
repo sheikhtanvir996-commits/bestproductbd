@@ -26,14 +26,14 @@ def get_bdstall_product():
             products.append(href)
     
     if not products:
-        raise Exception("No product links found on BDStall homepage.")
+        raise Exception("BDStall ওয়েবসাইট থেকে কোনো প্রোডাক্টের লিঙ্ক পাওয়া যায়নি।")
         
     selected_url = random.choice(list(set(products)))
     
     prod_resp = requests.get(selected_url, headers=headers)
     prod_soup = BeautifulSoup(prod_resp.text, 'html.parser')
     
-    title = prod_soup.find('h1').text.strip() if prod_soup.find('h1') else "উন্নত মানের ইলেকট্রনিক পণ্য"
+    title = prod_soup.find('h1').text.strip() if prod_soup.find('h1') else "উন্নত মানের প্রোডাক্ট"
     affiliate_url = f"{selected_url}?ref={AFFILIATE_ID}"
     
     return title, affiliate_url
@@ -43,16 +43,19 @@ def generate_content(title, aff_url):
     model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = f"""
-    তুমি একজন বিশেষজ্ঞ প্রোডাক্ট রিভিউ লেখক। নিচে দেওয়া প্রোডাক্টের ওপর ভিত্তি করে একটি দারুণ বাংলা রিভিউ ব্লগ পোস্ট তৈরি করো:
+    তুমি একজন পেশাদার প্রযুক্তি ও প্রোডাক্ট রিভিউ লেখক। নিচে দেওয়া প্রোডাক্টটির জন্য একটি আকর্ষণীয় ও এসইও-ফ্রেন্ডলি বাংলা ব্লগ পোস্ট তৈরি করো:
     প্রোডাক্টের নাম: {title}
     
     কন্টেন্টের নির্দেশিকা:
-    - একটি চমৎকার ও আকর্ষণীয় শিরোনাম দাও।
-    - প্রোডাক্টটির বিস্তারিত বিবরণ, বৈশিষ্ট্য ও সুবিধা আলোচনা করো।
-    - কন্টেন্টের শেষে বড় করে একটি কেনার জন্য কল-টু-অ্যাকশন টেক্সট/লিঙ্ক যুক্ত করো।
-    - কেনাকাটার লিঙ্কটি হলো: {aff_url}
+    ১. একটি দারুণ ও আকর্ষনীয় শিরোনাম দাও।
+    ২. প্রোডাক্টটির বিস্তারিত ভূমিকা ও বিবরণ দাও।
+    ৩. এর মূল ফিচার ও ব্যবহার করার সুবিধাগুলো বুলেট পয়েন্ট আকারে আলোচনা করো।
+    ৪. কেন এটি কেনা উচিত তার একটি চমৎকার উপসংহার দাও।
+    ৫. পোস্টের একদম শেষে বড় এবং স্পষ্ট করে কেনার জন্য একটি কল-টু-অ্যাকশন টেক্সট/বাটন যুক্ত করো।
     
-    HTML ট্যাগ ব্যবহার করে আউটপুট দাও (যেমন: <h2>, <p>, <ul>, <li>, <a>) যাতে সরাসরি ব্লগস্পটে পোস্ট হিসেবে দেখানো যায়।
+    কেনার লিঙ্ক: {aff_url}
+    
+    আউটপুটটি সম্পূর্ণ HTML ট্যাগ (যেমন: <h2>, <p>, <ul>, <li>, <a>) ব্যবহার করে দাও যেন সরাসরি Blogger-এ পোস্ট করা যায়।
     """
     
     response = model.generate_content(prompt)
