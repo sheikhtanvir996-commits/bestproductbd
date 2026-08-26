@@ -2,7 +2,7 @@ import os
 import random
 import requests
 from bs4 import BeautifulSoup
-import google.generativeai as genai
+from google import genai
 from googleapiclient.discovery import build
 
 BLOG_ID = os.getenv("BLOGGER_BLOG_ID")
@@ -26,50 +26,52 @@ def get_bdstall_product():
             products.append(href)
     
     if not products:
-        raise Exception("BDStall ওয়েবসাইট থেকে কোনো প্রোডাক্টের লিঙ্ক পাওয়া যায়নি।")
+        raise Exception("BDStall ওয়েবসাইট থেকে কোনো প্রোডাক্ট পাওয়া যায়নি।")
         
     selected_url = random.choice(list(set(products)))
     
     prod_resp = requests.get(selected_url, headers=headers)
     prod_soup = BeautifulSoup(prod_resp.text, 'html.parser')
     
-    title = prod_soup.find('h1').text.strip() if prod_soup.find('h1') else "উন্নত মানের প্রোডাক্ট"
+    title = prod_soup.find('h1').text.strip() if prod_soup.find('h1') else "উন্নত মানের ইলেকট্রনিক পণ্য"
     affiliate_url = f"{selected_url}?ref={AFFILIATE_ID}"
     
     return title, affiliate_url
 
 def generate_content(title, aff_url):
-    genai.configure(api_key=GEMINI_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    client = genai.Client(api_key=GEMINI_KEY.strip())
     
     prompt = f"""
     তুমি একজন পেশাদার প্রযুক্তি ও প্রোডাক্ট রিভিউ লেখক। নিচে দেওয়া প্রোডাক্টটির জন্য একটি আকর্ষণীয় ও এসইও-ফ্রেন্ডলি বাংলা ব্লগ পোস্ট তৈরি করো:
     প্রোডাক্টের নাম: {title}
     
     কন্টেন্টের নির্দেশিকা:
-    ১. একটি দারুণ ও আকর্ষনীয় শিরোনাম দাও।
+    ১. একটি চমৎকার ও আকর্ষণীয় শিরোনাম দাও।
     ২. প্রোডাক্টটির বিস্তারিত ভূমিকা ও বিবরণ দাও।
-    ৩. এর মূল ফিচার ও ব্যবহার করার সুবিধাগুলো বুলেট পয়েন্ট আকারে আলোচনা করো।
+    ৩. এর মূল ফিচার ও ব্যবহার করার সুবিধাগুলো আলোচনা করো।
     ৪. কেন এটি কেনা উচিত তার একটি চমৎকার উপসংহার দাও।
-    ৫. পোস্টের একদম শেষে বড় এবং স্পষ্ট করে কেনার জন্য একটি কল-টু-অ্যাকশন টেক্সট/বাটন যুক্ত করো।
+    ৫. পোস্টের একদম শেষে বড় এবং স্পষ্ট করে কেনার জন্য একটি লিঙ্ক যুক্ত করো।
     
     কেনার লিঙ্ক: {aff_url}
     
     আউটপুটটি সম্পূর্ণ HTML ট্যাগ (যেমন: <h2>, <p>, <ul>, <li>, <a>) ব্যবহার করে দাও যেন সরাসরি Blogger-এ পোস্ট করা যায়।
     """
     
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=prompt,
+    )
     return title, response.text
 
 def post_to_blogger(title, content):
-    blogger = build('blogger', 'v3', developerKey=API_KEY)
+    blogger = build('blogger', 'v3', developerKey=API_KEY.strip())
     body = {
         "kind": "blogger#post",
         "title": title,
         "content": content
     }
     posts = blogger.posts()
-    result = posts.insert(blogId=BLOG_ID, body=body).execute()
+    result = posts.insert(blogId=BLOG_ID.strip(), body=body).execute()
     print(f"Post successful! URL: {result.get('url')}")
 
 if __name__ == "__main__":
