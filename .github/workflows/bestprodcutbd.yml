@@ -2,8 +2,8 @@ name: BDStall Auto Blogger Bot
 
 on:
   schedule:
-    - cron: '0 2,10,18 * * *' # দিনে ৩ বার স্বয়ংক্রিয়ভাবে রান হবে
-  workflow_dispatch: # ম্যানুয়ালি রান করার অপশন
+    - cron: '0 2,10,18 * * *' # দিনে ৩ বার স্বয়ংক্রিয়ভাবে চলবে
+  workflow_dispatch: # ম্যানুয়ালি চালুর বাটন
 
 jobs:
   run-bot:
@@ -29,4 +29,4 @@ jobs:
         BLOGGER_API_KEY: ${{ secrets.BLOGGER_API_KEY }}
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         BDSTALL_AFFILIATE_ID: ${{ secrets.BDSTALL_AFFILIATE_ID }}
-      run: python auto_post.py
+      run: python bestproductbd.py
