@@ -3,12 +3,16 @@ import random
 import requests
 from bs4 import BeautifulSoup
 from google import genai
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 BLOG_ID = os.getenv("BLOGGER_BLOG_ID")
-API_KEY = os.getenv("BLOGGER_API_KEY")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 AFFILIATE_ID = os.getenv("BDSTALL_AFFILIATE_ID")
+
+CLIENT_ID = os.getenv("BLOGGER_CLIENT_ID")
+CLIENT_SECRET = os.getenv("BLOGGER_CLIENT_SECRET")
+REFRESH_TOKEN = os.getenv("BLOGGER_REFRESH_TOKEN")
 
 def get_bdstall_product():
     url = "https://www.bdstall.com/"
@@ -57,15 +61,25 @@ def generate_content(title, aff_url):
     আউটপুটটি সম্পূর্ণ HTML ট্যাগ (যেমন: <h2>, <p>, <ul>, <li>, <a>) ব্যবহার করে দাও যেন সরাসরি Blogger-এ পোস্ট করা যায়।
     """
     
-    # এরর মেসেজ অনুযায়ী gemini-3.6-flash মডেল ব্যবহার করা হলো
     response = client.models.generate_content(
-        model='gemini-3.6-flash',
+        model='gemini-2.5-flash',
         contents=prompt,
     )
     return title, response.text
 
 def post_to_blogger(title, content):
-    blogger = build('blogger', 'v3', developerKey=API_KEY.strip())
+    if not BLOG_ID or not REFRESH_TOKEN or not CLIENT_ID or not CLIENT_SECRET:
+        raise Exception("একটি বা একাধিক সিক্রেট (Secrets) মিসিং রয়েছে! GitHub Secrets চেক করুন।")
+
+    creds = Credentials(
+        token=None,
+        refresh_token=REFRESH_TOKEN.strip(),
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=CLIENT_ID.strip(),
+        client_secret=CLIENT_SECRET.strip()
+    )
+    
+    blogger = build('blogger', 'v3', credentials=creds)
     body = {
         "kind": "blogger#post",
         "title": title,
