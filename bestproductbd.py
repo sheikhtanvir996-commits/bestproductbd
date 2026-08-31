@@ -57,9 +57,9 @@ def generate_content(title, aff_url):
     আউটপুটটি সম্পূর্ণ HTML ট্যাগ (যেমন: <h2>, <p>, <ul>, <li>, <a>) ব্যবহার করে দাও যেন সরাসরি Blogger-এ পোস্ট করা যায়।
     """
     
-    # মডেল হিসেবে সঠিক ও হালনাগাদ gemini-2.0-flash ব্যবহার করা হয়েছে
+    # এরর মেসেজ অনুযায়ী gemini-3.6-flash মডেল ব্যবহার করা হলো
     response = client.models.generate_content(
-        model='gemini-2.0-flash',
+        model='gemini-3.6-flash',
         contents=prompt,
     )
     return title, response.text
