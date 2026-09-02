@@ -17,7 +17,7 @@ REFRESH_TOKEN = os.getenv("BLOGGER_REFRESH_TOKEN")
 
 def get_bdstall_product():
     # ইউআরএলটি স্ট্রিং হিসেবে একদম নিখুঁত রাখা হয়েছে
-    url = "[https://www.bdstall.com/](https://www.bdstall.com/)"
+    url = "[https://www.bdstall.com/]"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
     response = requests.get(url, headers=headers)
