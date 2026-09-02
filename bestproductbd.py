@@ -10,7 +10,7 @@ from googleapiclient.discovery import build
 
 BLOG_ID = os.getenv("BLOGGER_BLOG_ID")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-GROQ_KEY = os.getenv("GROQ_API_KEY")  # Groq Cloud API Key
+GROQ_KEY = os.getenv("GROQ_API_KEY")
 AFFILIATE_ID = os.getenv("BDSTALL_AFFILIATE_ID")
 
 CLIENT_ID = os.getenv("BLOGGER_CLIENT_ID")
@@ -46,7 +46,7 @@ def get_bdstall_product():
     title = prod_soup.find('h1').text.strip() if prod_soup.find('h1') else "উন্নত মানের পণ্য"
     affiliate_url = f"{selected_url}?ref={AFFILIATE_ID}"
     
-    # প্রোডাক্ট থেকে নিখুঁত ছবি খোঁজার লজিক
+    # প্রোডাক্ট থেকে ছবি বের করা
     image_url = None
     img_tag = prod_soup.find('img', {'id': 'bigimg'}) or prod_soup.find('img', {'class': 'product-image'})
     
@@ -66,7 +66,7 @@ def get_bdstall_product():
 
 def generate_with_groq(prompt):
     if not GROQ_KEY:
-        raise Exception("GROQ_API_KEY পাওয়া যায়নি! GitHub Secrets চেক করুন।")
+        raise Exception("GROQ_API_KEY গিটহাবের Actions environment-এ পাস করা হয়নি! YAML ফাইল চেক করুন।")
         
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
@@ -111,13 +111,13 @@ def generate_content_with_fallback(title, aff_url):
     - মার্কডাউন কোড ব্লক (```html বা ```) একদম ব্যবহার করবে না।
     """
     
-    # ১. প্রথমে Gemini দিয়ে চেষ্টা করবে
+    # ১. প্রথমে আপডেট জেমিনাই মডেল দিয়ে চেষ্টা করবে
     if GEMINI_KEY:
         try:
             client = genai.Client(api_key=GEMINI_KEY.strip())
-            print("Attempting generation with Gemini...")
+            print("Attempting generation with Gemini (gemini-3.6-flash)...")
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-3.6-flash',
                 contents=prompt,
             )
             if response.text:
