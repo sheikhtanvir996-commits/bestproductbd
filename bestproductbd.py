@@ -6,7 +6,6 @@ from bs4 import BeautifulSoup
 from google import genai
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-
 BLOG_ID = os.getenv("BLOGGER_BLOG_ID")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 AFFILIATE_ID = os.getenv("BDSTALL_AFFILIATE_ID")
@@ -55,7 +54,7 @@ def get_bdstall_product():
     if img_tag and img_tag.get('src'):
         image_url = img_tag['src']
         if not image_url.startswith('http'):
-            image_url = "[https://www.bdstall.com](https://www.bdstall.com)" + image_url
+            image_url = "[https://www.bdstall.com]" + image_url
             
     return title, affiliate_url, image_url
 
