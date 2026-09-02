@@ -28,7 +28,7 @@ def get_bdstall_product():
         href = a['href']
         if '/details/' in href:
             if not href.startswith('http'):
-                href = "[https://www.bdstall.com](https://www.bdstall.com)" + href
+                href = "[https://www.bdstall.com]" + href
             products.append(href)
     
     if not products:
