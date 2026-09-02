@@ -126,7 +126,7 @@ def post_to_blogger(title, content):
     creds = Credentials(
         token=None,
         refresh_token=REFRESH_TOKEN.strip(),
-        token_uri="[https://oauth2.googleapis.com/token](https://oauth2.googleapis.com/token)",
+        token_uri="https://oauth2.googleapis.com/token",
         client_id=CLIENT_ID.strip(),
         client_secret=CLIENT_SECRET.strip()
     )
