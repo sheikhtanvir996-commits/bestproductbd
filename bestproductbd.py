@@ -16,6 +16,7 @@ CLIENT_SECRET = os.getenv("BLOGGER_CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("BLOGGER_REFRESH_TOKEN")
 
 def get_bdstall_product():
+    # সরাসরি পরিষ্কার URL দেওয়া হয়েছে
     url = "[https://www.bdstall.com/](https://www.bdstall.com/)"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
@@ -41,14 +42,13 @@ def get_bdstall_product():
     title = prod_soup.find('h1').text.strip() if prod_soup.find('h1') else "উন্নত মানের ইলেকট্রনিক পণ্য"
     affiliate_url = f"{selected_url}?ref={AFFILIATE_ID}"
     
-    # প্রোডাক্টের ইমেজ ইউআরএল স্ক্র্যাপ করার চেষ্টা
+    # প্রোডাক্টের ছবি খোঁজার লজিক
     image_url = None
-    # BDStall-এর প্রোডাক্ট পেইজে ছবি বের করা
     img_tag = prod_soup.find('img', {'id': 'bigimg'}) or prod_soup.find('img', {'class': 'product-image'})
     if not img_tag:
         for img in prod_soup.find_all('img'):
             src = img.get('src', '')
-            if 'productshare' in src or 'product' in src or 'big' in src:
+            if 'productshare' in src or 'product' in src or 'big' in src or 'details' in src:
                 img_tag = img
                 break
                 
@@ -56,12 +56,13 @@ def get_bdstall_product():
         image_url = img_tag['src']
         if not image_url.startswith('http'):
             image_url = "[https://www.bdstall.com](https://www.bdstall.com)" + image_url
-    
+            
     return title, affiliate_url, image_url
 
 def generate_content(title, aff_url, image_url):
     client = genai.Client(api_key=GEMINI_KEY.strip())
     
+    # প্রোডাক্টের ছবি থাকলে তা HTML আকারে যুক্ত হবে
     img_html = f'<div style="text-align: center; margin-bottom: 20px;"><img src="{image_url}" alt="{title}" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"/></div>' if image_url else ''
     
     prompt = f"""
@@ -77,10 +78,10 @@ def generate_content(title, aff_url, image_url):
     
     কেনার লিঙ্ক: {aff_url}
     
-    বিশেষ নির্দেশনা:
-    - তোমার আউটপুট হতে হবে সরাসরি বিশুদ্ধ HTML টেক্সট।
-    - কোনো ধরনের সূচনা বা সমাপ্তিমূলক বাক্য (যেমন: "এখানে এইচটিএমএল প্রদান করা হলো") লেখা সম্পূর্ণ নিষেধ।
-    - কোড ব্লক মার্কডাউন (যেমন ```html বা ```) ব্যবহার করবে না। শুধুমাত্র সরাসরি HTML ট্যাগ থেকে লেখা শুরু করবে।
+    বিশেষ কঠোর নির্দেশাবলী:
+    - শুধুমাত্র সরাসরি বিশুদ্ধ HTML কোড আউটপুট দাও।
+    - কোনো ধরনের ভূমিকা, সম্ভাষণ বা বাড়তি কথা (যেমন: "এখানে এইচটিএমএল প্রদান করা হলো") লেখা কঠোরভাবে নিষেধ।
+    - কোড ব্লগ বা ব্যাকটিকস (যেমন ```html বা ```) ব্যবহার করবে না।
     """
     
     response = client.models.generate_content(
@@ -89,12 +90,13 @@ def generate_content(title, aff_url, image_url):
     )
     
     raw_content = response.text
-    # মার্কডাউন বা অতিরিক্ত কথা বাদ দেওয়া
-    cleaned_content = re.sub(r'^```html\s*', '', raw_content, flags=re.MULTILINE)
-    cleaned_content = re.sub(r'^```\s*', '', cleaned_content, flags=re.MULTILINE)
-    cleaned_content = re.sub(r'```$', '', cleaned_content, flags=re.MULTILINE).strip()
     
-    # ছবির এইচটিএমএল লেখার শুরুতে যুক্ত করা
+    # পোস্টের শুরু থেকে "এখানে সরাসরি Blogger-এ..." বা ```html জাতীয় সব বাড়তি টেক্সট অটোমেটিক মুছে ফেলার ফিল্টার
+    cleaned_content = re.sub(r'^.*?<', '<', raw_content, count=1, flags=re.DOTALL) if '<' in raw_content else raw_content
+    cleaned_content = re.sub(r'```html\s*', '', cleaned_content)
+    cleaned_content = re.sub(r'```\s*', '', cleaned_content).strip()
+    
+    # ছবি এবং পরিষ্কার কন্টেন্ট একসাথে মেলানো
     final_content = f"{img_html}\n{cleaned_content}"
     return title, final_content
 
