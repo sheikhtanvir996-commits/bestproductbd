@@ -1,11 +1,13 @@
 import os
 import random
 import re
+import time
 import requests
 from bs4 import BeautifulSoup
 from google import genai
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+
 BLOG_ID = os.getenv("BLOGGER_BLOG_ID")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 AFFILIATE_ID = os.getenv("BDSTALL_AFFILIATE_ID")
@@ -15,8 +17,10 @@ CLIENT_SECRET = os.getenv("BLOGGER_CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("BLOGGER_REFRESH_TOKEN")
 
 def get_bdstall_product():
-    # ইউআরএলটি স্ট্রিং হিসেবে একদম নিখুঁত রাখা হয়েছে
-    url = "https://www.bdstall.com/"
+    domain = "bdstall.com"
+    base_site = "https://" + domain
+    url = base_site + "/"
+    
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
     response = requests.get(url, headers=headers)
@@ -27,7 +31,7 @@ def get_bdstall_product():
         href = a['href']
         if '/details/' in href:
             if not href.startswith('http'):
-                href = "https://www.bdstall.com/" + href
+                href = base_site + href
             products.append(href)
     
     if not products:
@@ -38,33 +42,33 @@ def get_bdstall_product():
     prod_resp = requests.get(selected_url, headers=headers)
     prod_soup = BeautifulSoup(prod_resp.text, 'html.parser')
     
-    title = prod_soup.find('h1').text.strip() if prod_soup.find('h1') else "উন্নত মানের ইলেকট্রনিক পণ্য"
+    title = prod_soup.find('h1').text.strip() if prod_soup.find('h1') else "উন্নত মানের পণ্য"
     affiliate_url = f"{selected_url}?ref={AFFILIATE_ID}"
     
-    # প্রোডাক্টের ইমেজ ইউআরএল সংগ্রহের লজিক
+    # প্রোডাক্ট থেকে নির্ভুল ছবি খুঁজে বের করার লজিক
     image_url = None
+    # BDStall-এর প্রোডাক্টের ছবি যেখানে থাকে
     img_tag = prod_soup.find('img', {'id': 'bigimg'}) or prod_soup.find('img', {'class': 'product-image'})
+    
     if not img_tag:
         for img in prod_soup.find_all('img'):
             src = img.get('src', '')
-            if 'productshare' in src or 'product' in src or 'big' in src or 'details' in src:
+            if any(k in src for k in ['productshare', 'product', 'big', 'details', 'images']):
                 img_tag = img
                 break
                 
     if img_tag and img_tag.get('src'):
         image_url = img_tag['src']
         if not image_url.startswith('http'):
-            image_url = "https://www.bdstall.com" + image_url
+            image_url = base_site + image_url
             
     return title, affiliate_url, image_url
 
-def generate_content(title, aff_url, image_url):
+def generate_content_with_retry(title, aff_url):
     client = genai.Client(api_key=GEMINI_KEY.strip())
     
-    img_html = f'<div style="text-align: center; margin-bottom: 20px;"><img src="{image_url}" alt="{title}" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"/></div>' if image_url else ''
-    
     prompt = f"""
-    তুমি একজন পেশাদার প্রযুক্তি ও প্রোডাক্ট রিভিউ লেখক। নিচে দেওয়া প্রোডাক্টটির জন্য একটি আকর্ষণীয় ও এসইও-ফ্রেন্ডলি বাংলা ব্লগ পোস্ট তৈরি করো:
+    তুমি একজন পেশাদার প্রোডাক্ট রিভিউ লেখক। নিচে দেওয়া প্রোডাক্টটির জন্য একটি অত্যন্ত আকর্ষণীয় ও এসইও-ফ্রেন্ডলি বাংলা ব্লগ পোস্ট তৈরি করো:
     প্রোডাক্টের নাম: {title}
     
     কন্টেন্টের নির্দেশিকা:
@@ -76,31 +80,44 @@ def generate_content(title, aff_url, image_url):
     
     কেনার লিঙ্ক: {aff_url}
     
-    বিশেষ নির্দেশনা:
-    - শুধুমাত্র সরাসরি এইচটিএমএল ট্যাগ দিয়ে লেখা শুরু করবে।
-    - কোনো ধরনের সূচনা বাক্য (যেমন: "এখানে এইচটিএমএল প্রদান করা হলো") লিখবে না।
-    - ব্যাকটিকস (```) বা কোড ব্লক ব্যবহার করবে না।
+    বিশেষ নিয়ম:
+    - শুধুমাত্র সরাসরি বিশুদ্ধ HTML ট্যাগ (<p>, <h2>, <ul>, <li>, <a>) ব্যবহার করে আউটপুট দাও।
+    - কোনো সূচনা বা সমাপ্তিমূলক কথা (যেমন: "এখানে এইচটিএমএল কোড দেওয়া হলো") লিখবে না।
+    - মার্কডাউন কোড ব্লক (```html বা ```) একদম ব্যবহার করবে না।
     """
     
-    response = client.models.generate_content(
-        model='gemini-3.6-flash',
-        contents=prompt,
-    )
+    # একাধিক স্ট্যাবল মডেল এবং অটো-রিট্রাই ব্যবস্থা
+    models_to_try = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash']
     
-    raw_content = response.text
-    
-    # প্রথম এইচটিএমএল ট্যাগ < এর আগে থাকা সকল টেক্সট এবং ব্যাকটিকস মুছে ফেলার ফিল্টার
-    if '<' in raw_content:
-        cleaned_content = raw_content[raw_content.find('<'):]
-    else:
-        cleaned_content = raw_content
+    for model_name in models_to_try:
+        for attempt in range(3):
+            try:
+                print(f"Generating content using {model_name} (Attempt {attempt + 1})...")
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                if response.text:
+                    return response.text
+            except Exception as err:
+                print(f"Warning: {model_name} failed with error: {err}. Retrying in 3 seconds...")
+                time.sleep(3)
+                
+    raise Exception("গুগল জেমিনাই এর সকল মডেলে সাময়িক সমস্যা হচ্ছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।")
 
-    cleaned_content = re.sub(r'```html\s*', '', cleaned_content)
-    cleaned_content = re.sub(r'```\s*', '', cleaned_content).strip()
+def clean_html_content(raw_content, image_url, title):
+    # প্রোডাক্টের ইমেজ ব্লগের একদম শুরুতে যুক্ত করা
+    img_html = f'<div style="text-align: center; margin-bottom: 25px;"><img src="{image_url}" alt="{title}" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);"/></div>' if image_url else ''
     
-    # ছবি এবং কন্টেন্ট একত্র করা
-    final_content = f"{img_html}\n{cleaned_content}"
-    return title, final_content
+    cleaned = raw_content
+    # প্রথম HTML ট্যাগ (<) এর আগের সকল কথা মুছে ফেলা
+    if '<' in cleaned:
+        cleaned = cleaned[cleaned.find('<'):]
+        
+    cleaned = re.sub(r'```html\s*', '', cleaned)
+    cleaned = re.sub(r'```\s*', '', cleaned).strip()
+    
+    return f"{img_html}\n{cleaned}"
 
 def post_to_blogger(title, content):
     if not BLOG_ID or not REFRESH_TOKEN or not CLIENT_ID or not CLIENT_SECRET:
@@ -109,7 +126,7 @@ def post_to_blogger(title, content):
     creds = Credentials(
         token=None,
         refresh_token=REFRESH_TOKEN.strip(),
-        token_uri="https://oauth2.googleapis.com/token",
+        token_uri="[https://oauth2.googleapis.com/token](https://oauth2.googleapis.com/token)",
         client_id=CLIENT_ID.strip(),
         client_secret=CLIENT_SECRET.strip()
     )
@@ -127,7 +144,8 @@ def post_to_blogger(title, content):
 if __name__ == "__main__":
     try:
         title, aff_url, image_url = get_bdstall_product()
-        post_title, post_content = generate_content(title, aff_url, image_url)
-        post_to_blogger(post_title, post_content)
+        raw_content = generate_content_with_retry(title, aff_url)
+        final_content = clean_html_content(raw_content, image_url, title)
+        post_to_blogger(title, final_content)
     except Exception as e:
         print(f"Error occurred: {e}")
