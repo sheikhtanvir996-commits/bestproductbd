@@ -16,7 +16,7 @@ CLIENT_SECRET = os.getenv("BLOGGER_CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("BLOGGER_REFRESH_TOKEN")
 
 def get_bdstall_product():
-    # সরাসরি পরিষ্কার URL দেওয়া হয়েছে
+    # ইউআরএলটি স্ট্রিং হিসেবে একদম নিখুঁত রাখা হয়েছে
     url = "[https://www.bdstall.com/](https://www.bdstall.com/)"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
@@ -42,7 +42,7 @@ def get_bdstall_product():
     title = prod_soup.find('h1').text.strip() if prod_soup.find('h1') else "উন্নত মানের ইলেকট্রনিক পণ্য"
     affiliate_url = f"{selected_url}?ref={AFFILIATE_ID}"
     
-    # প্রোডাক্টের ছবি খোঁজার লজিক
+    # প্রোডাক্টের ইমেজ ইউআরএল সংগ্রহের লজিক
     image_url = None
     img_tag = prod_soup.find('img', {'id': 'bigimg'}) or prod_soup.find('img', {'class': 'product-image'})
     if not img_tag:
@@ -62,7 +62,6 @@ def get_bdstall_product():
 def generate_content(title, aff_url, image_url):
     client = genai.Client(api_key=GEMINI_KEY.strip())
     
-    # প্রোডাক্টের ছবি থাকলে তা HTML আকারে যুক্ত হবে
     img_html = f'<div style="text-align: center; margin-bottom: 20px;"><img src="{image_url}" alt="{title}" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"/></div>' if image_url else ''
     
     prompt = f"""
@@ -78,10 +77,10 @@ def generate_content(title, aff_url, image_url):
     
     কেনার লিঙ্ক: {aff_url}
     
-    বিশেষ কঠোর নির্দেশাবলী:
-    - শুধুমাত্র সরাসরি বিশুদ্ধ HTML কোড আউটপুট দাও।
-    - কোনো ধরনের ভূমিকা, সম্ভাষণ বা বাড়তি কথা (যেমন: "এখানে এইচটিএমএল প্রদান করা হলো") লেখা কঠোরভাবে নিষেধ।
-    - কোড ব্লগ বা ব্যাকটিকস (যেমন ```html বা ```) ব্যবহার করবে না।
+    বিশেষ নির্দেশনা:
+    - শুধুমাত্র সরাসরি এইচটিএমএল ট্যাগ দিয়ে লেখা শুরু করবে।
+    - কোনো ধরনের সূচনা বাক্য (যেমন: "এখানে এইচটিএমএল প্রদান করা হলো") লিখবে না।
+    - ব্যাকটিকস (```) বা কোড ব্লক ব্যবহার করবে না।
     """
     
     response = client.models.generate_content(
@@ -91,12 +90,16 @@ def generate_content(title, aff_url, image_url):
     
     raw_content = response.text
     
-    # পোস্টের শুরু থেকে "এখানে সরাসরি Blogger-এ..." বা ```html জাতীয় সব বাড়তি টেক্সট অটোমেটিক মুছে ফেলার ফিল্টার
-    cleaned_content = re.sub(r'^.*?<', '<', raw_content, count=1, flags=re.DOTALL) if '<' in raw_content else raw_content
+    # প্রথম এইচটিএমএল ট্যাগ < এর আগে থাকা সকল টেক্সট এবং ব্যাকটিকস মুছে ফেলার ফিল্টার
+    if '<' in raw_content:
+        cleaned_content = raw_content[raw_content.find('<'):]
+    else:
+        cleaned_content = raw_content
+
     cleaned_content = re.sub(r'```html\s*', '', cleaned_content)
     cleaned_content = re.sub(r'```\s*', '', cleaned_content).strip()
     
-    # ছবি এবং পরিষ্কার কন্টেন্ট একসাথে মেলানো
+    # ছবি এবং কন্টেন্ট একত্র করা
     final_content = f"{img_html}\n{cleaned_content}"
     return title, final_content
 
