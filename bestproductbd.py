@@ -73,23 +73,36 @@ def generate_with_groq(prompt):
         "Authorization": f"Bearer {GROQ_KEY.strip()}",
         "Content-Type": "application/json"
     }
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [
-            {
-                "role": "system", 
-                "content": "You are a professional product reviewer and tech blogger who writes comprehensive, engaging articles in Bengali using clean HTML formatting without markdown backticks."
-            },
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.6
-    }
     
-    response = requests.post(url, json=payload, headers=headers)
-    if response.status_code == 200:
-        return response.json()['choices'][0]['message']['content']
-    else:
-        raise Exception(f"Groq API Error ({response.status_code}): {response.text}")
+    # বর্তমান Groq এর সচল ও অনুমোদিত মডেলগুলোর তালিকা
+    groq_models = [
+        "llama-3.1-8b-instant",
+        "llama-3.3-70b-versatile",
+        "openai/gpt-oss-20b"
+    ]
+    
+    for model in groq_models:
+        print(f"Trying Groq model: {model}...")
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "system", 
+                    "content": "You are a professional product reviewer and tech blogger who writes comprehensive, engaging articles in Bengali using clean HTML formatting without markdown backticks."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.6
+        }
+        
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 200:
+            print(f"Successfully generated using Groq model: {model}")
+            return response.json()['choices'][0]['message']['content']
+        else:
+            print(f"Model {model} failed: {response.text}")
+            
+    raise Exception("Groq-এর কোনো মডেল দিয়েই কন্টেন্ট তৈরি করা যায়নি।")
 
 def generate_content_with_fallback(title, aff_url):
     prompt = f"""
@@ -123,7 +136,7 @@ def generate_content_with_fallback(title, aff_url):
             if response.text:
                 return response.text
         except Exception as e:
-            print(f"Gemini failed: {e}. Switching to Groq (Llama-3)...")
+            print(f"Gemini failed: {e}. Switching to Groq Cloud...")
             
     # ২. Gemini ব্যর্থ হলে Groq ব্যবহার করবে
     print("Generating content using Groq Cloud...")
