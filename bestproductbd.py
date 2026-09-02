@@ -10,6 +10,7 @@ from googleapiclient.discovery import build
 
 BLOG_ID = os.getenv("BLOGGER_BLOG_ID")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+GROQ_KEY = os.getenv("GROQ_API_KEY")  # Groq Cloud API Key
 AFFILIATE_ID = os.getenv("BDSTALL_AFFILIATE_ID")
 
 CLIENT_ID = os.getenv("BLOGGER_CLIENT_ID")
@@ -45,9 +46,8 @@ def get_bdstall_product():
     title = prod_soup.find('h1').text.strip() if prod_soup.find('h1') else "উন্নত মানের পণ্য"
     affiliate_url = f"{selected_url}?ref={AFFILIATE_ID}"
     
-    # প্রোডাক্ট থেকে নির্ভুল ছবি খুঁজে বের করার লজিক
+    # প্রোডাক্ট থেকে নিখুঁত ছবি খোঁজার লজিক
     image_url = None
-    # BDStall-এর প্রোডাক্টের ছবি যেখানে থাকে
     img_tag = prod_soup.find('img', {'id': 'bigimg'}) or prod_soup.find('img', {'class': 'product-image'})
     
     if not img_tag:
@@ -64,9 +64,34 @@ def get_bdstall_product():
             
     return title, affiliate_url, image_url
 
-def generate_content_with_retry(title, aff_url):
-    client = genai.Client(api_key=GEMINI_KEY.strip())
+def generate_with_groq(prompt):
+    if not GROQ_KEY:
+        raise Exception("GROQ_API_KEY পাওয়া যায়নি! GitHub Secrets চেক করুন।")
+        
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_KEY.strip()}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {
+                "role": "system", 
+                "content": "You are a professional product reviewer and tech blogger who writes comprehensive, engaging articles in Bengali using clean HTML formatting without markdown backticks."
+            },
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.6
+    }
     
+    response = requests.post(url, json=payload, headers=headers)
+    if response.status_code == 200:
+        return response.json()['choices'][0]['message']['content']
+    else:
+        raise Exception(f"Groq API Error ({response.status_code}): {response.text}")
+
+def generate_content_with_fallback(title, aff_url):
     prompt = f"""
     তুমি একজন পেশাদার প্রোডাক্ট রিভিউ লেখক। নিচে দেওয়া প্রোডাক্টটির জন্য একটি অত্যন্ত আকর্ষণীয় ও এসইও-ফ্রেন্ডলি বাংলা ব্লগ পোস্ট তৈরি করো:
     প্রোডাক্টের নাম: {title}
@@ -86,31 +111,28 @@ def generate_content_with_retry(title, aff_url):
     - মার্কডাউন কোড ব্লক (```html বা ```) একদম ব্যবহার করবে না।
     """
     
-    # একাধিক স্ট্যাবল মডেল এবং অটো-রিট্রাই ব্যবস্থা
-    models_to_try = ['gemini-3.8-flash']
-    
-    for model_name in models_to_try:
-        for attempt in range(3):
-            try:
-                print(f"Generating content using {model_name} (Attempt {attempt + 1})...")
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                )
-                if response.text:
-                    return response.text
-            except Exception as err:
-                print(f"Warning: {model_name} failed with error: {err}. Retrying in 3 seconds...")
-                time.sleep(3)
-                
-    raise Exception("গুগল জেমিনাই এর সকল মডেলে সাময়িক সমস্যা হচ্ছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।")
+    # ১. প্রথমে Gemini দিয়ে চেষ্টা করবে
+    if GEMINI_KEY:
+        try:
+            client = genai.Client(api_key=GEMINI_KEY.strip())
+            print("Attempting generation with Gemini...")
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+            )
+            if response.text:
+                return response.text
+        except Exception as e:
+            print(f"Gemini failed: {e}. Switching to Groq (Llama-3)...")
+            
+    # ২. Gemini ব্যর্থ হলে Groq ব্যবহার করবে
+    print("Generating content using Groq Cloud...")
+    return generate_with_groq(prompt)
 
 def clean_html_content(raw_content, image_url, title):
-    # প্রোডাক্টের ইমেজ ব্লগের একদম শুরুতে যুক্ত করা
     img_html = f'<div style="text-align: center; margin-bottom: 25px;"><img src="{image_url}" alt="{title}" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);"/></div>' if image_url else ''
     
     cleaned = raw_content
-    # প্রথম HTML ট্যাগ (<) এর আগের সকল কথা মুছে ফেলা
     if '<' in cleaned:
         cleaned = cleaned[cleaned.find('<'):]
         
@@ -121,7 +143,7 @@ def clean_html_content(raw_content, image_url, title):
 
 def post_to_blogger(title, content):
     if not BLOG_ID or not REFRESH_TOKEN or not CLIENT_ID or not CLIENT_SECRET:
-        raise Exception("একটি বা একাধিক সিক্রেট (Secrets) মিসিং রয়েছে! GitHub Secrets চেক করুন।")
+        raise Exception("একটি বা একাধিক সিক্রেট মিসিং রয়েছে! GitHub Secrets চেক করুন।")
 
     creds = Credentials(
         token=None,
@@ -144,7 +166,7 @@ def post_to_blogger(title, content):
 if __name__ == "__main__":
     try:
         title, aff_url, image_url = get_bdstall_product()
-        raw_content = generate_content_with_retry(title, aff_url)
+        raw_content = generate_content_with_fallback(title, aff_url)
         final_content = clean_html_content(raw_content, image_url, title)
         post_to_blogger(title, final_content)
     except Exception as e:
