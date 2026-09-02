@@ -1,7 +1,5 @@
 import os
 import random
-import re
-import time
 import requests
 from bs4 import BeautifulSoup
 from google import genai
@@ -17,10 +15,7 @@ CLIENT_SECRET = os.getenv("BLOGGER_CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("BLOGGER_REFRESH_TOKEN")
 
 def get_bdstall_product():
-    domain = "bdstall.com"
-    base_site = "https://" + domain
-    url = base_site + "/"
-    
+    url = "https://www.bdstall.com/"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
     response = requests.get(url, headers=headers)
@@ -31,7 +26,7 @@ def get_bdstall_product():
         href = a['href']
         if '/details/' in href:
             if not href.startswith('http'):
-                href = base_site + href
+                href = "https://www.bdstall.com" + href
             products.append(href)
     
     if not products:
@@ -42,37 +37,20 @@ def get_bdstall_product():
     prod_resp = requests.get(selected_url, headers=headers)
     prod_soup = BeautifulSoup(prod_resp.text, 'html.parser')
     
-    title = prod_soup.find('h1').text.strip() if prod_soup.find('h1') else "উন্নত মানের পণ্য"
+    title = prod_soup.find('h1').text.strip() if prod_soup.find('h1') else "উন্নত মানের ইলেকট্রনিক পণ্য"
     affiliate_url = f"{selected_url}?ref={AFFILIATE_ID}"
     
-    # প্রোডাক্ট থেকে নির্ভুল ছবি খুঁজে বের করার লজিক
-    image_url = None
-    # BDStall-এর প্রোডাক্টের ছবি যেখানে থাকে
-    img_tag = prod_soup.find('img', {'id': 'bigimg'}) or prod_soup.find('img', {'class': 'product-image'})
-    
-    if not img_tag:
-        for img in prod_soup.find_all('img'):
-            src = img.get('src', '')
-            if any(k in src for k in ['productshare', 'product', 'big', 'details', 'images']):
-                img_tag = img
-                break
-                
-    if img_tag and img_tag.get('src'):
-        image_url = img_tag['src']
-        if not image_url.startswith('http'):
-            image_url = base_site + image_url
-            
-    return title, affiliate_url, image_url
+    return title, affiliate_url
 
-def generate_content_with_retry(title, aff_url):
+def generate_content(title, aff_url):
     client = genai.Client(api_key=GEMINI_KEY.strip())
     
     prompt = f"""
-    তুমি একজন পেশাদার প্রোডাক্ট রিভিউ লেখক। নিচে দেওয়া প্রোডাক্টটির জন্য একটি অত্যন্ত আকর্ষণীয় ও এসইও-ফ্রেন্ডলি বাংলা ব্লগ পোস্ট তৈরি করো:
+    তুমি একজন পেশাদার প্রযুক্তি ও প্রোডাক্ট রিভিউ লেখক। নিচে দেওয়া প্রোডাক্টটির জন্য একটি আকর্ষণীয় ও এসইও-ফ্রেন্ডলি বাংলা ব্লগ পোস্ট তৈরি করো:
     প্রোডাক্টের নাম: {title}
     
     কন্টেন্টের নির্দেশিকা:
-    ১. একটি চমৎকার ও আকর্ষণীয় শিরোনাম (<h2>) দাও।
+    ১. একটি চমৎকার ও আকর্ষণীয় শিরোনাম দাও।
     ২. প্রোডাক্টটির বিস্তারিত ভূমিকা ও বিবরণ দাও।
     ৩. এর মূল ফিচার ও ব্যবহার করার সুবিধাগুলো আলোচনা করো।
     ৪. কেন এটি কেনা উচিত তার একটি চমৎকার উপসংহার দাও।
@@ -80,44 +58,14 @@ def generate_content_with_retry(title, aff_url):
     
     কেনার লিঙ্ক: {aff_url}
     
-    বিশেষ নিয়ম:
-    - শুধুমাত্র সরাসরি বিশুদ্ধ HTML ট্যাগ (<p>, <h2>, <ul>, <li>, <a>) ব্যবহার করে আউটপুট দাও।
-    - কোনো সূচনা বা সমাপ্তিমূলক কথা (যেমন: "এখানে এইচটিএমএল কোড দেওয়া হলো") লিখবে না।
-    - মার্কডাউন কোড ব্লক (```html বা ```) একদম ব্যবহার করবে না।
+    আউটপুটটি সম্পূর্ণ HTML ট্যাগ (যেমন: <h2>, <p>, <ul>, <li>, <a>) ব্যবহার করে দাও যেন সরাসরি Blogger-এ পোস্ট করা যায়।
     """
     
-    # একাধিক স্ট্যাবল মডেল এবং অটো-রিট্রাই ব্যবস্থা
-    models_to_try = ['gemini-3.6-flash']
-    
-    for model_name in models_to_try:
-        for attempt in range(3):
-            try:
-                print(f"Generating content using {model_name} (Attempt {attempt + 1})...")
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                )
-                if response.text:
-                    return response.text
-            except Exception as err:
-                print(f"Warning: {model_name} failed with error: {err}. Retrying in 3 seconds...")
-                time.sleep(3)
-                
-    raise Exception("গুগল জেমিনাই এর সকল মডেলে সাময়িক সমস্যা হচ্ছে। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।")
-
-def clean_html_content(raw_content, image_url, title):
-    # প্রোডাক্টের ইমেজ ব্লগের একদম শুরুতে যুক্ত করা
-    img_html = f'<div style="text-align: center; margin-bottom: 25px;"><img src="{image_url}" alt="{title}" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);"/></div>' if image_url else ''
-    
-    cleaned = raw_content
-    # প্রথম HTML ট্যাগ (<) এর আগের সকল কথা মুছে ফেলা
-    if '<' in cleaned:
-        cleaned = cleaned[cleaned.find('<'):]
-        
-    cleaned = re.sub(r'```html\s*', '', cleaned)
-    cleaned = re.sub(r'```\s*', '', cleaned).strip()
-    
-    return f"{img_html}\n{cleaned}"
+    response = client.models.generate_content(
+        model='gemini-3.6-flash',
+        contents=prompt,
+    )
+    return title, response.text
 
 def post_to_blogger(title, content):
     if not BLOG_ID or not REFRESH_TOKEN or not CLIENT_ID or not CLIENT_SECRET:
@@ -126,7 +74,7 @@ def post_to_blogger(title, content):
     creds = Credentials(
         token=None,
         refresh_token=REFRESH_TOKEN.strip(),
-        token_uri="[https://oauth2.googleapis.com/token](https://oauth2.googleapis.com/token)",
+        token_uri="https://oauth2.googleapis.com/token",
         client_id=CLIENT_ID.strip(),
         client_secret=CLIENT_SECRET.strip()
     )
@@ -143,9 +91,8 @@ def post_to_blogger(title, content):
 
 if __name__ == "__main__":
     try:
-        title, aff_url, image_url = get_bdstall_product()
-        raw_content = generate_content_with_retry(title, aff_url)
-        final_content = clean_html_content(raw_content, image_url, title)
-        post_to_blogger(title, final_content)
+        title, aff_url = get_bdstall_product()
+        post_title, post_content = generate_content(title, aff_url)
+        post_to_blogger(post_title, post_content)
     except Exception as e:
         print(f"Error occurred: {e}")
