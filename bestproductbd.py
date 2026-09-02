@@ -1,5 +1,6 @@
 import os
 import random
+import re
 import requests
 from bs4 import BeautifulSoup
 from google import genai
@@ -15,7 +16,7 @@ CLIENT_SECRET = os.getenv("BLOGGER_CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("BLOGGER_REFRESH_TOKEN")
 
 def get_bdstall_product():
-    url = "https://www.bdstall.com/"
+    url = "[https://www.bdstall.com/](https://www.bdstall.com/)"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
     response = requests.get(url, headers=headers)
@@ -26,7 +27,7 @@ def get_bdstall_product():
         href = a['href']
         if '/details/' in href:
             if not href.startswith('http'):
-                href = "https://www.bdstall.com" + href
+                href = "[https://www.bdstall.com](https://www.bdstall.com)" + href
             products.append(href)
     
     if not products:
@@ -40,17 +41,35 @@ def get_bdstall_product():
     title = prod_soup.find('h1').text.strip() if prod_soup.find('h1') else "উন্নত মানের ইলেকট্রনিক পণ্য"
     affiliate_url = f"{selected_url}?ref={AFFILIATE_ID}"
     
-    return title, affiliate_url
+    # প্রোডাক্টের ইমেজ ইউআরএল স্ক্র্যাপ করার চেষ্টা
+    image_url = None
+    # BDStall-এর প্রোডাক্ট পেইজে ছবি বের করা
+    img_tag = prod_soup.find('img', {'id': 'bigimg'}) or prod_soup.find('img', {'class': 'product-image'})
+    if not img_tag:
+        for img in prod_soup.find_all('img'):
+            src = img.get('src', '')
+            if 'productshare' in src or 'product' in src or 'big' in src:
+                img_tag = img
+                break
+                
+    if img_tag and img_tag.get('src'):
+        image_url = img_tag['src']
+        if not image_url.startswith('http'):
+            image_url = "[https://www.bdstall.com](https://www.bdstall.com)" + image_url
+    
+    return title, affiliate_url, image_url
 
-def generate_content(title, aff_url):
+def generate_content(title, aff_url, image_url):
     client = genai.Client(api_key=GEMINI_KEY.strip())
+    
+    img_html = f'<div style="text-align: center; margin-bottom: 20px;"><img src="{image_url}" alt="{title}" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);"/></div>' if image_url else ''
     
     prompt = f"""
     তুমি একজন পেশাদার প্রযুক্তি ও প্রোডাক্ট রিভিউ লেখক। নিচে দেওয়া প্রোডাক্টটির জন্য একটি আকর্ষণীয় ও এসইও-ফ্রেন্ডলি বাংলা ব্লগ পোস্ট তৈরি করো:
     প্রোডাক্টের নাম: {title}
     
     কন্টেন্টের নির্দেশিকা:
-    ১. একটি চমৎকার ও আকর্ষণীয় শিরোনাম দাও।
+    ১. একটি চমৎকার ও আকর্ষণীয় শিরোনাম (<h2>) দাও।
     ২. প্রোডাক্টটির বিস্তারিত ভূমিকা ও বিবরণ দাও।
     ৩. এর মূল ফিচার ও ব্যবহার করার সুবিধাগুলো আলোচনা করো।
     ৪. কেন এটি কেনা উচিত তার একটি চমৎকার উপসংহার দাও।
@@ -58,14 +77,26 @@ def generate_content(title, aff_url):
     
     কেনার লিঙ্ক: {aff_url}
     
-    আউটপুটটি সম্পূর্ণ HTML ট্যাগ (যেমন: <h2>, <p>, <ul>, <li>, <a>) ব্যবহার করে দাও যেন সরাসরি Blogger-এ পোস্ট করা যায়।
+    বিশেষ নির্দেশনা:
+    - তোমার আউটপুট হতে হবে সরাসরি বিশুদ্ধ HTML টেক্সট।
+    - কোনো ধরনের সূচনা বা সমাপ্তিমূলক বাক্য (যেমন: "এখানে এইচটিএমএল প্রদান করা হলো") লেখা সম্পূর্ণ নিষেধ।
+    - কোড ব্লক মার্কডাউন (যেমন ```html বা ```) ব্যবহার করবে না। শুধুমাত্র সরাসরি HTML ট্যাগ থেকে লেখা শুরু করবে।
     """
     
     response = client.models.generate_content(
         model='gemini-3.6-flash',
         contents=prompt,
     )
-    return title, response.text
+    
+    raw_content = response.text
+    # মার্কডাউন বা অতিরিক্ত কথা বাদ দেওয়া
+    cleaned_content = re.sub(r'^```html\s*', '', raw_content, flags=re.MULTILINE)
+    cleaned_content = re.sub(r'^```\s*', '', cleaned_content, flags=re.MULTILINE)
+    cleaned_content = re.sub(r'```$', '', cleaned_content, flags=re.MULTILINE).strip()
+    
+    # ছবির এইচটিএমএল লেখার শুরুতে যুক্ত করা
+    final_content = f"{img_html}\n{cleaned_content}"
+    return title, final_content
 
 def post_to_blogger(title, content):
     if not BLOG_ID or not REFRESH_TOKEN or not CLIENT_ID or not CLIENT_SECRET:
@@ -91,8 +122,8 @@ def post_to_blogger(title, content):
 
 if __name__ == "__main__":
     try:
-        title, aff_url = get_bdstall_product()
-        post_title, post_content = generate_content(title, aff_url)
+        title, aff_url, image_url = get_bdstall_product()
+        post_title, post_content = generate_content(title, aff_url, image_url)
         post_to_blogger(post_title, post_content)
     except Exception as e:
         print(f"Error occurred: {e}")
