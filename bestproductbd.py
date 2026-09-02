@@ -16,7 +16,7 @@ REFRESH_TOKEN = os.getenv("BLOGGER_REFRESH_TOKEN")
 
 def get_bdstall_product():
     # ইউআরএলটি স্ট্রিং হিসেবে একদম নিখুঁত রাখা হয়েছে
-    url = "[https://www.bdstall.com/]"
+    url = "https://www.bdstall.com/"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     
     response = requests.get(url, headers=headers)
@@ -27,7 +27,7 @@ def get_bdstall_product():
         href = a['href']
         if '/details/' in href:
             if not href.startswith('http'):
-                href = "[https://www.bdstall.com]" + href
+                href = "https://www.bdstall.com/" + href
             products.append(href)
     
     if not products:
@@ -54,7 +54,7 @@ def get_bdstall_product():
     if img_tag and img_tag.get('src'):
         image_url = img_tag['src']
         if not image_url.startswith('http'):
-            image_url = "[https://www.bdstall.com]" + image_url
+            image_url = "https://www.bdstall.com" + image_url
             
     return title, affiliate_url, image_url
 
