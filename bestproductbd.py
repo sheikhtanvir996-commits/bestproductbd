@@ -115,6 +115,12 @@ def generate_content_with_fallback(title, aff_url):
     ৩. এর মূল ফিচার ও ব্যবহার করার সুবিধাগুলো আলোচনা করো।
     ৪. কেন এটি কেনা উচিত তার একটি চমৎকার উপসংহার দাও।
     ৫. পোস্টের একদম শেষে বড় এবং স্পষ্ট করে কেনার জন্য একটি লিঙ্ক যুক্ত করো।
+    বাটনের জন্য ঠিক এই HTML কোডটি পোস্টের শেষে ব্যবহার করবে:
+    <div style="text-align: center; margin: 35px 0;">
+      <a href="{aff_url}" target="_blank" style="background-color: #28a745; color: #ffffff; padding: 16px 30px; font-size: 18px; font-weight: bold; text-decoration: none; border-radius: 8px; display: inline-block; box-shadow: 0 4px 10px rgba(0,0,0,0.2); transition: 0.3s;">
+        🛒 সেরা দামে {title} কিনতে এখানে ক্লিক করুন
+      </a>
+    </div>
     
     কেনার লিঙ্ক: {aff_url}
     
